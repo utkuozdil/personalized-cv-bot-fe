@@ -32,18 +32,8 @@ export default function Home() {
     const storedEmbeddingKey = localStorage.getItem('embeddingKey')
     const storedEmail = localStorage.getItem('email')
     
-    console.log('Initializing from storage:', { storedStatus, storedUuid, storedEmbeddingKey, storedEmail })
-    
     if (storedEmail) {
       setEmail(storedEmail)
-      checkPreviousCV(storedEmail)
-        .then(previousData => {
-          if (previousData) {
-            setPreviousCV(previousData)
-            setShowPreviousDialog(true)
-          }
-        })
-        .catch(error => console.error('Error checking previous CV on init:', error))
     }
     
     if (storedStatus && storedUuid) {
@@ -123,18 +113,6 @@ export default function Home() {
 
     // Store valid email in localStorage
     localStorage.setItem('email', newEmail)
-
-    // Check for previous CVs when email is valid
-    try {
-      const previousData = await checkPreviousCV(newEmail)
-      if (previousData) {
-        setPreviousCV(previousData)
-        setShowPreviousDialog(true)
-      }
-    } catch (error) {
-      console.error('Error checking previous CV:', error)
-      setEmailError('Error checking previous CV status')
-    }
   }
 
   // Remove separate blur handler since we're checking on change
@@ -152,6 +130,19 @@ export default function Home() {
       return
     }
 
+    // Check for previous CVs before uploading
+    try {
+      const previousData = await checkPreviousCV(email)
+      if (previousData) {
+        setPreviousCV(previousData)
+        setShowPreviousDialog(true)
+        return
+      }
+    } catch (error) {
+      console.error('Error checking previous CV:', error)
+      // Continue with upload even if check fails
+    }
+
     setFile(uploadedFile)
     setStatus('uploading')
     setProgress(0)
@@ -159,7 +150,6 @@ export default function Home() {
 
     try {
       const newUuid = await uploadCV(uploadedFile, email)
-      console.log('File uploaded, UUID:', newUuid)
       setUuid(newUuid)
       setStatus('created')
       localStorage.setItem('uuid', newUuid)

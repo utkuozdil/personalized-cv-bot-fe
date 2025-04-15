@@ -70,7 +70,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const handleScroll = useCallback(() => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current
-      const atBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 50
+      const atBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 100
       setShouldScroll(atBottom)
     }
   }, [])
@@ -96,13 +96,24 @@ function ChatInterface({ socket, embeddingKey, email }) {
     }
   }, [])
 
-  // Add scroll event listener
+  // Add scroll event listener with throttling
   useEffect(() => {
     const container = chatContainerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll, { passive: true })
-      return () => container.removeEventListener('scroll', handleScroll)
+    if (!container) return
+
+    let ticking = false
+    const throttledScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          handleScroll()
+          ticking = false
+        })
+        ticking = true
+      }
     }
+
+    container.addEventListener('scroll', throttledScroll, { passive: true })
+    return () => container.removeEventListener('scroll', throttledScroll)
   }, [handleScroll])
 
   // Initial scroll to bottom
@@ -112,19 +123,18 @@ function ChatInterface({ socket, embeddingKey, email }) {
     }
   }, [])
 
-  // Optimized scroll effect
+  // Optimized scroll effect for new messages
   useEffect(() => {
-    if (messages.length > 0 || currentStreamingMessage) {
-      requestAnimationFrame(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({
-            behavior: shouldScroll ? 'smooth' : 'auto',
-            block: 'end'
-          })
-        }
-      })
+    const scrollToBottom = () => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }
     }
-  }, [messages.length, currentStreamingMessage, shouldScroll])
+
+    if (messages.length > 0) {
+      scrollToBottom()
+    }
+  }, [messages.length])
 
   // Sync messages with localStorage
   useEffect(() => {
@@ -140,7 +150,11 @@ function ChatInterface({ socket, embeddingKey, email }) {
     }
     formatTimeoutRef.current = setTimeout(() => {
       setCurrentStreamingMessage(newContent)
-    }, 16) // Reduced debounce time for smoother updates
+      // Scroll to bottom when streaming
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }
+    }, 10) // Reduced to 10ms for smoother updates
   }, [])
 
   // Effect to handle initial message check and retry
@@ -358,12 +372,13 @@ function ChatInterface({ socket, embeddingKey, email }) {
     <div className="flex flex-col h-full bg-white rounded-lg shadow-lg">
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto scroll-smooth"
         style={{
           height: 'calc(100vh - 280px)',
           minHeight: '400px',
           scrollbarWidth: 'thin',
-          scrollbarColor: '#CBD5E0 #F1F5F9'
+          scrollbarColor: '#CBD5E0 #F1F5F9',
+          WebkitOverflowScrolling: 'touch' // For smooth scrolling on iOS
         }}
       >
         <div className="flex flex-col p-6 space-y-4">
