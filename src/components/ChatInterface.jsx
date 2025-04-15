@@ -41,7 +41,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const [isTyping, setIsTyping] = useState(false)
   const [shouldScroll, setShouldScroll] = useState(true)
   const [isConnected, setIsConnected] = useState(false)
-  const [isWaitingForInitial, setIsWaitingForInitial] = useState(messages.length === 0)  // Only wait if no messages
+  const [isWaitingForInitial, setIsWaitingForInitial] = useState(messages.length === 0)
   const messagesEndRef = useRef(null)
   const streamingMessageRef = useRef('')
   const formatTimeoutRef = useRef(null)
@@ -50,6 +50,10 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const reconnectTimeoutRef = useRef(null)
   const initialMessageSentRef = useRef(false)
   const retryTimeoutRef = useRef(null)
+  const messageIdRef = useRef(null)
+  const isProcessingRef = useRef(false)
+  const lastStreamEndRef = useRef(null)
+  const lastAssistantMessageRef = useRef('')
 
   const isNearBottom = useCallback(() => {
     if (chatContainerRef.current) {
@@ -154,7 +158,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
       if (messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
       }
-    }, 10) // Reduced to 10ms for smoother updates
+    }, 10)
   }, [])
 
   // Effect to handle initial message check and retry
@@ -200,22 +204,21 @@ function ChatInterface({ socket, embeddingKey, email }) {
 
   const addMessage = useCallback((newMessage) => {
     setMessages(prev => {
-      // Check if this message is already in the array
-      const isDuplicate = prev.some(msg => 
-        msg.text === newMessage.text && 
-        msg.isBot === newMessage.isBot &&
-        Math.abs(new Date(msg.timestamp) - new Date(newMessage.timestamp)) < 1000
-      )
-      
-      if (isDuplicate) {
-        return prev
+      if (newMessage.isBot) {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.isBot && lastMessage.text === newMessage.text) {
+          return prev;
+        }
       }
-
-      const newMessages = [...prev, newMessage]
-      localStorage.setItem('conversation', JSON.stringify(newMessages))
-      return newMessages
-    })
-  }, [])
+      const newMessages = [...prev, newMessage];
+      localStorage.setItem('conversation', JSON.stringify(newMessages));
+      // Only update the ref after the message is actually added
+      if (newMessage.isBot) {
+        lastAssistantMessageRef.current = newMessage.text;
+      }
+      return newMessages;
+    });
+  }, []);
 
   // Initialize WebSocket handlers
   useEffect(() => {
@@ -261,70 +264,55 @@ function ChatInterface({ socket, embeddingKey, email }) {
 
     const handleMessage = (event) => {
       try {
-        const parsedData = JSON.parse(event.data)
-        
+        const parsedData = JSON.parse(event.data);
+
         if (parsedData.type === 'initial_response') {
-          setIsWaitingForInitial(false)
-          setIsTyping(false)
+          setIsWaitingForInitial(false);
+          setIsTyping(false);
         } else if (parsedData.type === 'typing') {
-          setIsTyping(true)
-          setIsStreaming(true)
-          streamingMessageRef.current = ''
-          setCurrentStreamingMessage('')
+          setIsTyping(true);
+          setCurrentStreamingMessage('');
+          streamingMessageRef.current = '';
         } else if (parsedData.type === 'stream') {
           if (parsedData.token && typeof parsedData.token === 'string') {
-            streamingMessageRef.current += parsedData.token
-            updateStreamingMessage(streamingMessageRef.current)
+            streamingMessageRef.current += parsedData.token;
+            setCurrentStreamingMessage(streamingMessageRef.current);
+            setIsTyping(true);
           }
         } else if (parsedData.type === 'stream_end') {
-          // Get the final message before clearing the ref
-          const finalMessage = streamingMessageRef.current.trim()
-          
-          // Clear streaming states first
-          streamingMessageRef.current = ''
-          setCurrentStreamingMessage('')
-          setIsStreaming(false)
-          setIsTyping(false)
+          const finalMessage = streamingMessageRef.current.trim();
+          streamingMessageRef.current = '';
+          setCurrentStreamingMessage('');
+          setIsTyping(false);
+          setIsStreaming(false); // Reset streaming state
 
-          // Then add the message if we have content
           if (finalMessage) {
             const newMessage = convertToMessageFormat({
               content: finalMessage,
               role: 'assistant',
-              timestamp: new Date().toISOString()
-            })
-            
-            // Use a timeout to ensure state updates are complete
-            setTimeout(() => {
-              addMessage(newMessage)
-            }, 0)
+              timestamp: new Date().toISOString(),
+            });
+            addMessage(newMessage);
           }
         } else if (parsedData.type === 'error') {
-          setIsWaitingForInitial(false)
-          
-          // Clear states first
-          streamingMessageRef.current = ''
-          setCurrentStreamingMessage('')
-          setIsStreaming(false)
-          setIsTyping(false)
-
+          setIsTyping(false);
+          setIsStreaming(false); // Also reset streaming state on error
+          streamingMessageRef.current = '';
+          setCurrentStreamingMessage('');
           if (parsedData.message) {
             const newMessage = convertToMessageFormat({
               content: parsedData.message,
               role: 'assistant',
               timestamp: new Date().toISOString(),
-              error: true
-            })
-            addMessage(newMessage)
+              error: true,
+            });
+            addMessage(newMessage);
           }
         }
       } catch (error) {
-        console.error('Error handling WebSocket message:', error)
-        setIsWaitingForInitial(false)
-        streamingMessageRef.current = ''
-        setCurrentStreamingMessage('')
-        setIsStreaming(false)
-        setIsTyping(false)
+        setIsTyping(false);
+        streamingMessageRef.current = '';
+        setCurrentStreamingMessage('');
       }
     }
     
@@ -340,7 +328,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
         clearTimeout(reconnectTimeoutRef.current)
       }
     }
-  }, [socket, embeddingKey, email, messages.length, addMessage])
+  }, [socket, embeddingKey, email, messages.length, addMessage, isStreaming])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -358,6 +346,9 @@ function ChatInterface({ socket, embeddingKey, email }) {
     setIsStreaming(true)
     setIsTyping(true)
     streamingMessageRef.current = ''
+    messageIdRef.current = Date.now().toString()
+    isProcessingRef.current = true
+    lastStreamEndRef.current = null
 
     const messageData = {
       question: messageText,
