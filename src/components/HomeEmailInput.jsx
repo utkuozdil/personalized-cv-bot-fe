@@ -12,7 +12,7 @@ const HomeEmailInput = ({ email, emailError, handleEmailChange, handleEmailBlur 
           id="email"
           value={email}
           onChange={handleEmailChange}
-          onBlur={handleEmailBlur}
+          onBlur={(e) => handleEmailBlur(e)}
           placeholder="Enter your email"
           className={`w-full px-4 py-3 border-2 rounded-xl bg-gray-50/50 
             ${emailError ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'}
