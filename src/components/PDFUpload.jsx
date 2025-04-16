@@ -50,7 +50,7 @@ function PDFUpload({ onFileSelect }) {
           }
         `}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} data-testid="file-input" />
         
         {/* Upload Area Content */}
         <div className="px-8 py-12 text-center relative z-10">

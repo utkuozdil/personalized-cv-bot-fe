@@ -73,7 +73,7 @@ function About() {
             How It Works
           </h2>
           <div className="space-y-6">
-            <div className="flex items-center justify-center space-x-4">
+            <div className="flex items-center justify-center space-x-4" data-testid="step-item">
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
                 1
               </div>
@@ -81,7 +81,7 @@ function About() {
                 Upload your CV in PDF format through our secure interface
               </p>
             </div>
-            <div className="flex items-center justify-center space-x-4">
+            <div className="flex items-center justify-center space-x-4" data-testid="step-item">
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
                 2
               </div>
@@ -89,7 +89,7 @@ function About() {
                 Our AI processes and analyzes your CV content
               </p>
             </div>
-            <div className="flex items-center justify-center space-x-4">
+            <div className="flex items-center justify-center space-x-4" data-testid="step-item">
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
                 3
               </div>

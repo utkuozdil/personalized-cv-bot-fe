@@ -17,6 +17,7 @@ function PreviousCVDialog({
       }}
       maxWidth="sm"
       fullWidth
+      data-testid="previous-cv-dialog"
     >
       <DialogTitle className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b">
         <div className="flex items-center space-x-3">

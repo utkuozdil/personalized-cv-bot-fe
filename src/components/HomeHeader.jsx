@@ -5,7 +5,7 @@ const HomeHeader = () => {
   return (
     <div className="text-center mb-16">
       <div className="flex items-center justify-center mb-6">
-        <div className="bg-blue-50 p-4 rounded-2xl">
+        <div className="bg-blue-50 p-4 rounded-2xl" data-testid="chat-icon-container">
           <ChatBubbleLeftRightIcon className="h-12 w-12 text-blue-600" />
         </div>
       </div>

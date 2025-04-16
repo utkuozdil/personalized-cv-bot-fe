@@ -9,7 +9,7 @@ const ConfirmationMessage = ({ status, getStatusMessage }) => {
         <div className="text-center space-y-4">
           <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100">
             <div className="flex justify-center mb-4">
-              <div className="bg-blue-100 rounded-xl p-3">
+              <div className="bg-blue-100 rounded-xl p-3" data-testid="envelope-icon-container">
                 <EnvelopeIcon className="h-8 w-8 text-blue-600" />
               </div>
             </div>

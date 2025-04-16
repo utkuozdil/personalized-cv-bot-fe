@@ -7,7 +7,7 @@ const ErrorMessage = ({ message, onTryAgain }) => {
       <div className="text-center space-y-4">
         <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
           <div className="flex justify-center mb-4">
-            <div className="bg-red-100 rounded-xl p-3">
+            <div className="bg-red-100 rounded-xl p-3" data-testid="error-icon-container">
               <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
             </div>
           </div>

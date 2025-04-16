@@ -22,7 +22,7 @@ function LoadingSpinner({ message = 'Processing your CV...' }) {
   return (
     <div className="flex flex-col items-center justify-center py-12">
       {/* Spinner with Icon */}
-      <div className="relative mb-8">
+      <div className="relative mb-8" data-testid="spinner-container">
         {/* Outer glow */}
         <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-xl"></div>
         
