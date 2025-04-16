@@ -3,6 +3,7 @@ import MessageList from './chat/MessageList'
 import ChatInput from './chat/ChatInput'
 import { convertToMessageFormat } from '../utils/format'
 function ChatInterface({ socket, embeddingKey, email }) {
+  // console.log('[ChatInterface] Props received:', { socket, embeddingKey, email }); // <-- REMOVED
   
   // Load initial conversation from localStorage
   const [messages, setMessages] = useState(() => {
@@ -40,6 +41,8 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const isProcessingRef = useRef(false)
   const lastStreamEndRef = useRef(null)
   const lastAssistantMessageRef = useRef('')
+
+  // console.log('[ChatInterface] Initial messages state:', messages); // <-- REMOVED
 
   const scrollToBottom = useCallback(() => {
     if (shouldScroll && messagesEndRef.current) {
@@ -105,6 +108,13 @@ function ChatInterface({ socket, embeddingKey, email }) {
     }
   }, [messages.length])
 
+  // Scroll to bottom when streaming message updates (if user hasn't scrolled up)
+  useEffect(() => {
+    if (currentStreamingMessage && shouldScroll) {
+      scrollToBottom();
+    }
+  }, [currentStreamingMessage, shouldScroll, scrollToBottom]);
+
   // Sync messages with localStorage
   useEffect(() => {
     if (messages.length > 0) {
@@ -116,29 +126,39 @@ function ChatInterface({ socket, embeddingKey, email }) {
   useEffect(() => {
     const checkForInitialMessage = async () => {
       if (messages.length === 0) {
-        setIsTyping(true) // Show typing indicator
+        // console.log('[ChatInterface] Checking for initial message for email:', email); // <-- REMOVED
+        setIsTyping(true) 
         try {
           const response = await fetch(`/api/check-email?email=${encodeURIComponent(email)}`)
+          // console.log('[ChatInterface] API Response Status:', response.status); // <-- REMOVED
+          // console.log('[ChatInterface] API Response OK?:', response.ok); // <-- REMOVED
+
+          if (!response.ok) {
+            // console.error('[ChatInterface] API Error Response:', await response.text()); // <-- REMOVED
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
           const data = await response.json()
+          // console.log('[ChatInterface] API Response Data:', data); // <-- REMOVED
           
           if (data.hasPrevious && Array.isArray(data.resumes) && data.resumes.length > 0) {
+            // console.log('[ChatInterface] Found previous conversation.'); // <-- REMOVED
             const latestCV = data.resumes[0]
             if (Array.isArray(latestCV.conversation) && latestCV.conversation.length > 0) {
               setMessages(latestCV.conversation.map(convertToMessageFormat))
               localStorage.setItem('conversation', JSON.stringify(latestCV.conversation.map(convertToMessageFormat)))
               setIsWaitingForInitial(false)
               setIsTyping(false)
-              return
+              return 
             }
           }
           
-          // If we didn't find a conversation, retry after 500ms
-          retryTimeoutRef.current = setTimeout(checkForInitialMessage, 500)
+          // console.log('[ChatInterface] No previous conversation found or conversation empty...'); // <-- REMOVED
         } catch (error) {
-          console.error('Error checking for initial message:', error)
-          retryTimeoutRef.current = setTimeout(checkForInitialMessage, 500)
-        }
+          // console.error('[ChatInterface] Error checking for initial message:', error) // <-- REMOVED
+        } 
       } else {
+        // console.log('[ChatInterface] Already have messages, skipping initial check.'); // <-- REMOVED
         setIsWaitingForInitial(false)
         setIsTyping(false)
       }

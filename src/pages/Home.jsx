@@ -117,38 +117,58 @@ export default function Home() {
     localStorage.setItem('email', newEmail)
   }
 
-  // Remove separate blur handler since we're checking on change
-  const handleEmailBlur = () => {
+  const handleEmailBlur = async () => {
+    console.log('[Home] handleEmailBlur triggered for:', email);
     if (!email) {
-      setEmailError('Email is required')
-    } else if (!validateEmail(email)) {
-      setEmailError('Please enter a valid email address')
+      console.log('[Home] Email blur: Email is empty.');
+      setEmailError('Email is required');
+      return; // Don't check if empty
+    } 
+    
+    if (!validateEmail(email)) {
+      console.log('[Home] Email blur: Email is invalid.');
+      setEmailError('Please enter a valid email address');
+      return; // Don't check if invalid
     }
-  }
-
-  const handleFileUpload = async (uploadedFile) => {
-    if (!email) {
-      setEmailError('Please enter your email first')
-      return
-    }
-
-    // Check for previous CVs before uploading
+    
+    // Email is valid, clear error and check for previous CV
+    console.log('[Home] Email blur: Email is valid, checking previous CV...');
+    setEmailError(''); // Clear error if valid
+    
     try {
-      const previousData = await checkPreviousCV(email)
+      const previousData = await checkPreviousCV(email);
+      console.log('[Home] Email blur: checkPreviousCV response:', previousData);
       if (previousData) {
-        setPreviousCV(previousData)
-        setShowPreviousDialog(true)
-        return
+        console.log('[Home] Email blur: Previous CV found, showing dialog.');
+        setPreviousCV(previousData);
+        setShowPreviousDialog(true);
+      } else {
+        console.log('[Home] Email blur: No previous CV found.');
+        // Optionally clear previousCV state if necessary, though it should be null
+        // setPreviousCV(null);
+        // Ensure dialog is hidden if check runs again and finds nothing
+        // setShowPreviousDialog(false);
       }
     } catch (error) {
-      console.error('Error checking previous CV:', error)
-      // Continue with upload even if check fails
+      console.error('[Home] Email blur: Error checking previous CV:', error);
+      // Handle check error - maybe show a temporary message or just log it?
+      // For now, just log it and allow user to proceed to upload.
     }
+  };
 
-    setFile(uploadedFile)
-    setStatus('uploading')
-    setProgress(0)
-    setHighestProgress(0)
+  const handleFileUpload = async (uploadedFile) => {
+    console.log('[Home] handleFileUpload triggered with file:', uploadedFile?.name);
+    if (!email || !validateEmail(email)) { // Also re-validate email here just in case
+      console.log('[Home] File upload: Email is missing or invalid.');
+      setEmailError('Please enter a valid email first');
+      return;
+    }
+    
+    console.log('[Home] File upload: Proceeding with new upload for:', email);
+    setFile(uploadedFile);
+    setStatus('uploading');
+    setProgress(0);
+    setHighestProgress(0);
 
     try {
       const newUuid = await uploadCV(uploadedFile, email)
