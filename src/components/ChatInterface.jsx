@@ -1,21 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import MessageList from './chat/MessageList'
 import ChatInput from './chat/ChatInput'
-
-// Convert conversation format to message format
-const convertToMessageFormat = (conversationItem) => {
-  if ('text' in conversationItem) {
-    // Already in message format
-    return conversationItem
-  }
-  return {
-    text: conversationItem.content,
-    isBot: conversationItem.role === 'assistant',
-    error: false,
-    timestamp: conversationItem.timestamp
-  }
-}
-
+import { convertToMessageFormat } from '../utils/format'
 function ChatInterface({ socket, embeddingKey, email }) {
   
   // Load initial conversation from localStorage
@@ -55,15 +41,6 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const lastStreamEndRef = useRef(null)
   const lastAssistantMessageRef = useRef('')
 
-  const isNearBottom = useCallback(() => {
-    if (chatContainerRef.current) {
-      const container = chatContainerRef.current
-      const threshold = 100 // pixels from bottom
-      return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold
-    }
-    return true
-  }, [])
-
   const scrollToBottom = useCallback(() => {
     if (shouldScroll && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
@@ -78,18 +55,6 @@ function ChatInterface({ socket, embeddingKey, email }) {
       setShouldScroll(atBottom)
     }
   }, [])
-
-  // Debounced scroll to bottom
-  const debouncedScrollToBottom = useCallback(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current)
-    }
-    scrollTimeoutRef.current = setTimeout(() => {
-      if (shouldScroll) {
-        scrollToBottom()
-      }
-    }, 100) // Debounce scroll updates
-  }, [shouldScroll, scrollToBottom])
 
   // Clean up scroll timeout on unmount
   useEffect(() => {
@@ -146,20 +111,6 @@ function ChatInterface({ socket, embeddingKey, email }) {
       localStorage.setItem('conversation', JSON.stringify(messages))
     }
   }, [messages])
-
-  // Debounced format and update
-  const updateStreamingMessage = useCallback((newContent) => {
-    if (formatTimeoutRef.current) {
-      clearTimeout(formatTimeoutRef.current)
-    }
-    formatTimeoutRef.current = setTimeout(() => {
-      setCurrentStreamingMessage(newContent)
-      // Scroll to bottom when streaming
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      }
-    }, 10)
-  }, [])
 
   // Effect to handle initial message check and retry
   useEffect(() => {
