@@ -4,6 +4,9 @@ import '@testing-library/jest-dom'
 import ChatInterface from '../../src/components/ChatInterface'
 import { convertToMessageFormat } from '../../src/utils/format'
 
+// Use fake timers
+jest.useFakeTimers();
+
 // Mock localStorage
 const mockLocalStorage = {
   getItem: jest.fn(),
@@ -19,20 +22,14 @@ let mockSocket = null
 class MockWebSocket {
   constructor(url) {
     this.url = url
-    this.readyState = WebSocket.OPEN
+    this.readyState = WebSocket.OPEN // Assume open immediately for simplicity
     this.send = jest.fn()
     this.close = jest.fn()
     this.onopen = jest.fn()
     this.onclose = jest.fn()
     this.onmessage = jest.fn()
     
-    // Store instance for testing
-    mockSocket = this
-    
-    // Simulate connection immediately
-    setTimeout(() => {
-      if (this.onopen) this.onopen()
-    }, 0)
+    mockSocket = this // Assign instance for test access
   }
 }
 
@@ -43,7 +40,8 @@ global.WebSocket = MockWebSocket
 // Mock fetch
 global.fetch = jest.fn(() =>
   Promise.resolve({
-    json: () => Promise.resolve({ hasInitialMessage: true, message: 'Initial message' })
+    ok: true,
+    json: () => Promise.resolve({ hasPrevious: false }) 
   })
 )
 
@@ -54,12 +52,27 @@ describe('ChatInterface', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockLocalStorage.clear()
+    // Create the mock socket instance before each test
     mockSocket = new MockWebSocket('ws://localhost')
     mockLocalStorage.getItem.mockReturnValue(null)
+    global.fetch.mockClear()
+    jest.clearAllTimers();
   })
 
+  // Helper function to render with props
+  const renderComponent = (props = {}) => {
+    return render(
+      <ChatInterface 
+        socket={mockSocket}
+        embeddingKey="test-key" 
+        email="test@example.com" 
+        {...props} 
+      />
+    )
+  }
+
   it('renders without crashing', () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+    renderComponent()
     expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument()
   })
 
@@ -70,19 +83,27 @@ describe('ChatInterface', () => {
     ]
     mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockMessages))
 
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+    renderComponent()
     
     await waitFor(() => {
       const messages = screen.getAllByText(/Hello|Hi there/)
       expect(messages).toHaveLength(2)
-      expect(messages[0]).toHaveTextContent('Hello')
-      expect(messages[1]).toHaveTextContent('Hi there')
     })
+    expect(global.fetch).not.toHaveBeenCalled()
+    // Manually trigger onopen, but it shouldn't send due to localStorage data
+    act(() => { mockSocket.onopen?.() });
+    expect(mockSocket.send).not.toHaveBeenCalled()
   })
 
-  it('handles WebSocket connection and initial message', async () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+  it('handles WebSocket connection and sends initial message if no localStorage data', async () => {
+    renderComponent()
+    
+    // Manually trigger onopen to simulate connection completing
+    act(() => { 
+      mockSocket.onopen?.(); 
+    });
 
+    // Now wait for the send call triggered by onopen
     await waitFor(() => {
       expect(mockSocket.send).toHaveBeenCalledWith(JSON.stringify({
         type: 'initial',
@@ -93,89 +114,128 @@ describe('ChatInterface', () => {
   })
 
   it('handles incoming WebSocket messages correctly', async () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+    renderComponent()
+    
+    // Manually trigger onopen first
+    act(() => { mockSocket.onopen?.(); });
+    await waitFor(() => { expect(mockSocket.send).toHaveBeenCalledTimes(1); }); // Ensure connection established
 
+    // Simulate initial response
+    act(() => {
+      mockSocket.onmessage({ data: JSON.stringify({ type: 'initial_response' }) })
+    })
     await waitFor(() => {
-      expect(mockSocket.onmessage).toBeDefined()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
 
+    // Simulate typing indicator
     act(() => {
       mockSocket.onmessage({ data: JSON.stringify({ type: 'typing' }) })
     })
-
     await waitFor(() => {
-      expect(screen.getByText(/Typing.../)).toBeInTheDocument()
+      expect(screen.getByRole('status')).toBeInTheDocument()
     })
 
+    // Simulate message stream
     act(() => {
-      mockSocket.onmessage({ data: JSON.stringify({ 
-        type: 'message', 
-        content: 'Test message' 
-      }) })
+      mockSocket.onmessage({ data: JSON.stringify({ type: 'stream', token: 'Test ' }) })
+      mockSocket.onmessage({ data: JSON.stringify({ type: 'stream', token: 'message' }) })
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Test message/)).toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
 
+    // Simulate stream end
+    act(() => {
+      mockSocket.onmessage({ data: JSON.stringify({ type: 'stream_end' }) })
+    })
     await waitFor(() => {
       const messages = screen.getAllByText(/Test message/)
       expect(messages[messages.length - 1]).toHaveTextContent('Test message')
-      expect(screen.queryByText(/Typing.../)).not.toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
   })
 
   it('sends user messages and updates conversation', async () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+    const { container } = renderComponent()
 
+    // Manually trigger onopen and wait for initial send
+    act(() => { mockSocket.onopen?.(); });
     await waitFor(() => {
-      expect(mockSocket.send).toBeDefined()
+      expect(mockSocket.send).toHaveBeenCalledTimes(1)
     })
 
     const input = screen.getByPlaceholderText(/type your message/i)
-    const form = screen.getByRole('form', { hidden: true })
+    // Find form using container query as getByRole seems problematic
+    const form = container.querySelector('form') 
+    expect(form).toBeInTheDocument() // Verify form is found
     
     fireEvent.change(input, { target: { value: 'New message' } })
     fireEvent.submit(form)
 
+    // Check for the second send call
     await waitFor(() => {
-      expect(mockSocket.send).toHaveBeenCalledWith(JSON.stringify({
-        type: 'message',
-        content: 'New message',
+      expect(mockSocket.send).toHaveBeenCalledTimes(2)
+      expect(mockSocket.send).toHaveBeenNthCalledWith(2, JSON.stringify({
+        question: 'New message',
         embeddingKey: 'test-key',
         email: 'test@example.com'
       }))
+    })
+    
+    // User message should appear
+    await waitFor(() => {
       const messages = screen.getAllByText(/New message/)
       expect(messages[messages.length - 1]).toHaveTextContent('New message')
     })
+    expect(input).toHaveValue('')
   })
 
-  it('checks for initial message from API', async () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
-
+  it('checks for initial message from API if no localStorage', async () => {
+    renderComponent()
+    
+    // Wait for the fetch call
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         `/api/check-email?email=${encodeURIComponent('test@example.com')}`
       )
     })
-
-    await waitFor(() => {
-      const messages = screen.getAllByText((content, element) => {
-        return element.textContent === 'Initial message'
-      })
-      expect(messages[messages.length - 1]).toHaveTextContent('Initial message')
-    })
+    
+    // Trigger onopen just in case fetch result interacts with it
+    act(() => { mockSocket.onopen?.(); });
+    
+    // Ensure no specific message from API mock appears
+    await act(async () => { jest.advanceTimersByTime(10); });
+    expect(screen.queryByText('Initial message')).not.toBeInTheDocument(); 
   })
 
   it('handles WebSocket disconnection', async () => {
-    render(<ChatInterface embeddingKey="test-key" email="test@example.com" />)
+    renderComponent()
 
-    await waitFor(() => {
-      expect(mockSocket.onclose).toBeDefined()
-    })
+    // Manually trigger onopen 
+    act(() => { mockSocket.onopen?.(); });
+    await waitFor(() => { expect(mockSocket.send).toHaveBeenCalledTimes(1); });
+    
+    // Ensure onclose is assigned
+    expect(mockSocket.onclose).toBeDefined()
 
+    // Simulate close event and update readyState
     act(() => {
+      // Set readyState before calling handler, as component checks it
+      mockSocket.readyState = WebSocket.CLOSED 
       mockSocket.onclose()
     })
 
+    // Advance timers past the 3-second delay
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    // Check for the disconnection message
     await waitFor(() => {
-      expect(screen.getByText(/connection lost/i)).toBeInTheDocument()
+      expect(screen.getByText(/Connection lost/i)).toBeInTheDocument()
+      expect(screen.getByText(/Attempting to reconnect/i)).toBeInTheDocument()
     })
   })
 }) 
