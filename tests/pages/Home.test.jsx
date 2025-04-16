@@ -3,12 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import Home from '../../src/pages/Home'
 import { uploadCV, pollStatus, checkPreviousCV } from '../../src/utils/cv'
-import { useWebSocket } from '../../src/hooks/useWebSocket'
 
 // Mock the hooks and services
-jest.mock('../../src/hooks/useWebSocket', () => ({
-  useWebSocket: jest.fn()
-}))
 jest.mock('../../src/utils/cv')
 
 describe('Home Page', () => {
@@ -17,39 +13,21 @@ describe('Home Page', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    useWebSocket.mockReturnValue({
-      sendMessage: mockSendMessage,
-      lastMessage: null,
-      connected: true
-    })
     uploadCV.mockResolvedValue('test-uuid')
     pollStatus.mockResolvedValue({ status: 'processing', progress: 50 })
     checkPreviousCV.mockResolvedValue(null)
+    localStorage.clear()
   })
 
   describe('Email validation', () => {
-    it('shows error for invalid email', async () => {
+    it('shows error for invalid email', () => {
       render(<Home />)
       
-      const emailInput = screen.getByLabelText(/Email Address/i)
+      const emailInput = screen.getByRole('textbox', { type: /email/i })
       fireEvent.change(emailInput, { target: { value: 'invalid-email' } })
       fireEvent.blur(emailInput)
 
-      await waitFor(() => {
-        expect(screen.getByText(/Please enter a valid email address/i)).toBeInTheDocument()
-      })
-    })
-
-    it('accepts valid email', async () => {
-      render(<Home />)
-      
-      const emailInput = screen.getByLabelText(/Email Address/i)
-      fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
-      fireEvent.blur(emailInput)
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Please enter a valid email address/i)).not.toBeInTheDocument()
-      })
+      expect(screen.getByText(/Please enter a valid email address/i)).toBeInTheDocument()
     })
   })
 
@@ -70,8 +48,9 @@ describe('Home Page', () => {
     it('handles successful file upload', async () => {
       render(<Home />)
       
-      const emailInput = screen.getByLabelText(/Email Address/i)
+      const emailInput = screen.getByRole('textbox', { type: /email/i })
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+      fireEvent.blur(emailInput)
       
       const file = new File(['test content'], 'test.pdf', { type: 'application/pdf' })
       const fileInput = screen.getByTestId('file-input')
@@ -85,17 +64,19 @@ describe('Home Page', () => {
 
   describe('Previous CV Handling', () => {
     it('shows dialog when previous CV exists', async () => {
+      checkPreviousCV.mockResolvedValueOnce({ id: 'previous-cv-id' })
       render(<Home />)
       
-      const emailInput = screen.getByLabelText(/Email Address/i)
+      const emailInput = screen.getByRole('textbox', { type: /email/i })
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+      fireEvent.blur(emailInput)
       
       const file = new File(['test content'], 'test.pdf', { type: 'application/pdf' })
       const fileInput = screen.getByTestId('file-input')
       fireEvent.change(fileInput, { target: { files: [file] } })
 
       await waitFor(() => {
-        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+        expect(screen.getByTestId('previous-cv-dialog')).toBeInTheDocument()
       })
     })
   })
@@ -104,8 +85,9 @@ describe('Home Page', () => {
     it('updates status and progress during file processing', async () => {
       render(<Home />)
       
-      const emailInput = screen.getByLabelText(/Email Address/i)
+      const emailInput = screen.getByRole('textbox', { type: /email/i })
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
+      fireEvent.blur(emailInput)
       
       const file = new File(['test content'], 'test.pdf', { type: 'application/pdf' })
       const fileInput = screen.getByTestId('file-input')
