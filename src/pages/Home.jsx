@@ -117,15 +117,17 @@ export default function Home() {
     localStorage.setItem('email', newEmail)
   }
 
-  const handleEmailBlur = async () => {
-    console.log('[Home] handleEmailBlur triggered for:', email);
-    if (!email) {
+  const handleEmailBlur = async (e) => {
+    const currentEmailValue = e.target.value.trim();
+    console.log('[Home] handleEmailBlur triggered for value:', currentEmailValue);
+    
+    if (!currentEmailValue) {
       console.log('[Home] Email blur: Email is empty.');
       setEmailError('Email is required');
       return; // Don't check if empty
     } 
     
-    if (!validateEmail(email)) {
+    if (!validateEmail(currentEmailValue)) {
       console.log('[Home] Email blur: Email is invalid.');
       setEmailError('Please enter a valid email address');
       return; // Don't check if invalid
@@ -136,7 +138,7 @@ export default function Home() {
     setEmailError(''); // Clear error if valid
     
     try {
-      const previousData = await checkPreviousCV(email);
+      const previousData = await checkPreviousCV(currentEmailValue);
       console.log('[Home] Email blur: checkPreviousCV response:', previousData);
       if (previousData) {
         console.log('[Home] Email blur: Previous CV found, showing dialog.');
@@ -144,15 +146,9 @@ export default function Home() {
         setShowPreviousDialog(true);
       } else {
         console.log('[Home] Email blur: No previous CV found.');
-        // Optionally clear previousCV state if necessary, though it should be null
-        // setPreviousCV(null);
-        // Ensure dialog is hidden if check runs again and finds nothing
-        // setShowPreviousDialog(false);
       }
     } catch (error) {
       console.error('[Home] Email blur: Error checking previous CV:', error);
-      // Handle check error - maybe show a temporary message or just log it?
-      // For now, just log it and allow user to proceed to upload.
     }
   };
 
