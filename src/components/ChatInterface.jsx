@@ -3,8 +3,6 @@ import MessageList from './chat/MessageList'
 import ChatInput from './chat/ChatInput'
 import { convertToMessageFormat } from '../utils/format'
 function ChatInterface({ socket, embeddingKey, email }) {
-  // console.log('[ChatInterface] Props received:', { socket, embeddingKey, email }); // <-- REMOVED
-  
   // Load initial conversation from localStorage
   const [messages, setMessages] = useState(() => {
     try {
@@ -41,8 +39,8 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const isProcessingRef = useRef(false)
   const lastStreamEndRef = useRef(null)
   const lastAssistantMessageRef = useRef('')
-
-  // console.log('[ChatInterface] Initial messages state:', messages); // <-- REMOVED
+  const pollIntervalRef = useRef(null)
+  const POLL_INTERVAL = 500
 
   const scrollToBottom = useCallback(() => {
     if (shouldScroll && messagesEndRef.current) {
@@ -126,49 +124,60 @@ function ChatInterface({ socket, embeddingKey, email }) {
   useEffect(() => {
     const checkForInitialMessage = async () => {
       if (messages.length === 0) {
-        // console.log('[ChatInterface] Checking for initial message for email:', email); // <-- REMOVED
         setIsTyping(true) 
         try {
           const response = await fetch(`/api/check-email?email=${encodeURIComponent(email)}`)
-          // console.log('[ChatInterface] API Response Status:', response.status); // <-- REMOVED
-          // console.log('[ChatInterface] API Response OK?:', response.ok); // <-- REMOVED
-
+          
           if (!response.ok) {
-            // console.error('[ChatInterface] API Error Response:', await response.text()); // <-- REMOVED
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           
           const data = await response.json()
-          // console.log('[ChatInterface] API Response Data:', data); // <-- REMOVED
           
           if (data.hasPrevious && Array.isArray(data.resumes) && data.resumes.length > 0) {
-            // console.log('[ChatInterface] Found previous conversation.'); // <-- REMOVED
             const latestCV = data.resumes[0]
             if (Array.isArray(latestCV.conversation) && latestCV.conversation.length > 0) {
               setMessages(latestCV.conversation.map(convertToMessageFormat))
               localStorage.setItem('conversation', JSON.stringify(latestCV.conversation.map(convertToMessageFormat)))
               setIsWaitingForInitial(false)
               setIsTyping(false)
+              // Clear polling if we got messages
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
               return 
             }
           }
-          
-          // console.log('[ChatInterface] No previous conversation found or conversation empty...'); // <-- REMOVED
         } catch (error) {
-          // console.error('[ChatInterface] Error checking for initial message:', error) // <-- REMOVED
+          console.error('Error checking for initial message:', error)
         } 
       } else {
-        // console.log('[ChatInterface] Already have messages, skipping initial check.'); // <-- REMOVED
         setIsWaitingForInitial(false)
         setIsTyping(false)
+        // Clear polling if we have messages
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
       }
     }
 
+    // Initial check
     checkForInitialMessage()
+
+    // Start polling only if no messages
+    if (messages.length === 0 && !pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(checkForInitialMessage, POLL_INTERVAL)
+    }
 
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
       }
     }
   }, [email, messages.length])
@@ -214,6 +223,12 @@ function ChatInterface({ socket, embeddingKey, email }) {
     const handleClose = () => {
       setIsConnected(false)
       initialMessageSentRef.current = false
+      
+      // Clear polling on disconnect
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
       
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)

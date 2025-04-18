@@ -20,6 +20,7 @@ export default function Home() {
   const [uuid, setUuid] = useState(null)
   const [embeddingKey, setEmbeddingKey] = useState(null)
   const [socket, setSocket] = useState(null)
+  const [errorMessageText, setErrorMessageText] = useState('')
 
   // UI state
   const [progress, setProgress] = useState(0)
@@ -65,6 +66,7 @@ export default function Home() {
         
         newSocket.onerror = (error) => {
           console.error('WebSocket error:', error)
+          setErrorMessageText('WebSocket connection error. Please try again.')
           setStatus('error')
           setSocket(null)
         }
@@ -175,8 +177,9 @@ export default function Home() {
       await checkInitialStatus(newUuid)
     } catch (error) {
       console.error('Error uploading file:', error)
+      setErrorMessageText('Error uploading your CV. Please try again.')
       setStatus('error')
-      clearState()
+      clearProcessingState()
     }
   }
 
@@ -208,21 +211,51 @@ export default function Home() {
         localStorage.setItem('embeddingKey', newEmbeddingKey)
         localStorage.setItem('status', 'embedded')
         localStorage.setItem('uuid', currentUuid)
+      } else if (newStatus === 'extraction_failed') {
+        console.error('Extraction failed:', newStatus)
+        setErrorMessageText('CV extraction failed. The document might be corrupted or unreadable. Please check the file and try again.')
+        setStatus('error')
+        clearProcessingState()
+      } else if (newStatus === 'extraction_insufficient') {
+        console.error('Extraction insufficient:', newStatus)
+        setErrorMessageText('CV extraction insufficient. We could not gather enough information from the document. Please ensure it contains relevant details.')
+        setStatus('error')
+        clearProcessingState()
       } else if (STATUS_ORDER.includes(newStatus)) {
-        console.log('Status not complete, polling again in 2s...')
-        setTimeout(() => checkInitialStatus(currentUuid), 2000)
+        console.log('Status not complete, polling again in 500ms...')
+        setTimeout(() => checkInitialStatus(currentUuid), 500)
       } else {
         console.error('Unexpected status:', newStatus)
+        setErrorMessageText('An unexpected error occurred during processing. Please try again.')
         setStatus('error')
-        clearState()
+        clearProcessingState()
       }
     } catch (error) {
       console.error('Error checking status:', error)
+      setErrorMessageText('Error checking the processing status. Please try again.')
       setStatus('error')
-      clearState()
+      clearProcessingState()
     }
   }
 
+  const clearProcessingState = () => {
+    if (socket) {
+      socket.close()
+    }
+    localStorage.removeItem('status')
+    localStorage.removeItem('uuid')
+    localStorage.removeItem('embeddingKey')
+    localStorage.removeItem('conversation')
+    localStorage.removeItem('currentEmbeddingKey')
+    setUuid(null)
+    setEmbeddingKey(null)
+    setSocket(null)
+    setProgress(0)
+    setHighestProgress(0)
+    // Don't clear email, error message, or set status to idle
+  }
+
+  // Add back the full clearState function for complete resets
   const clearState = () => {
     if (socket) {
       socket.close()
@@ -239,12 +272,13 @@ export default function Home() {
     setProgress(0)
     setHighestProgress(0)
     setStatus('idle')
+    setErrorMessageText('')
   }
 
   const handleStartNew = () => {
     setShowPreviousDialog(false)
     setPreviousCV(null)
-    clearState()
+    clearState() // Use full clearState to reset everything
   }
 
   const handleResumePrevious = async () => {
@@ -273,13 +307,15 @@ export default function Home() {
         localStorage.setItem('embeddingKey', newEmbeddingKey)
         localStorage.setItem('currentEmbeddingKey', newEmbeddingKey)
       } else {
+        setErrorMessageText('The previous CV session seems to be incomplete or invalid. Please start a new session.')
         setStatus('error')
-        clearState()
+        clearProcessingState()
       }
     } catch (error) {
       console.error('Error checking previous CV:', error)
+      setErrorMessageText('Error retrieving your previous CV session. Please try again or start a new session.')
       setStatus('error')
-      clearState()
+      clearProcessingState()
     }
   }
 
@@ -332,7 +368,8 @@ export default function Home() {
               {/* Error State */}
               {status === 'error' && (
                 <ErrorMessage
-                  message="An error occurred while processing your CV. Please try again."
+                  data-testid="error-message-component"
+                  message={errorMessageText || "An error occurred. Please try again."}
                   onTryAgain={handleStartNew}
                 />
               )}
