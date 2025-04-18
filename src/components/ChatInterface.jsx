@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import MessageList from './chat/MessageList'
 import ChatInput from './chat/ChatInput'
 import { convertToMessageFormat } from '../utils/format'
-function ChatInterface({ socket, embeddingKey, email }) {
+
+function ChatInterface({ socket, embeddingKey, email, onRestartChat }) {
   // Load initial conversation from localStorage
   const [messages, setMessages] = useState(() => {
     try {
@@ -40,6 +41,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
   const lastStreamEndRef = useRef(null)
   const lastAssistantMessageRef = useRef('')
   const pollIntervalRef = useRef(null)
+  const inputRef = useRef(null)
   const POLL_INTERVAL = 500
 
   const scrollToBottom = useCallback(() => {
@@ -119,6 +121,21 @@ function ChatInterface({ socket, embeddingKey, email }) {
       localStorage.setItem('conversation', JSON.stringify(messages))
     }
   }, [messages])
+
+  // Additional effect to check socket state periodically
+  useEffect(() => {
+    if (!socket) return
+    
+    // Check if socket is actually open but state doesn't reflect it
+    const checkConnectionInterval = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN && !isConnected) {
+        console.log('Connection check: Socket open but isConnected is false, fixing state')
+        setIsConnected(true)
+      }
+    }, 1000)
+    
+    return () => clearInterval(checkConnectionInterval)
+  }, [socket, isConnected])
 
   // Effect to handle initial message check and retry
   useEffect(() => {
@@ -205,6 +222,7 @@ function ChatInterface({ socket, embeddingKey, email }) {
     if (!socket) return
 
     const handleOpen = () => {
+      console.log('Socket open, setting connected state')
       setIsConnected(true)
       
       // Only send initial message if we don't have any messages
@@ -220,7 +238,14 @@ function ChatInterface({ socket, embeddingKey, email }) {
       }
     }
 
+    // Immediately set connection state based on socket's current state
+    if (socket.readyState === WebSocket.OPEN) {
+      console.log('Socket already open, setting connected state')
+      setIsConnected(true)
+    }
+
     const handleClose = () => {
+      console.log('Socket closed, setting disconnected state')
       setIsConnected(false)
       initialMessageSentRef.current = false
       
@@ -279,6 +304,13 @@ function ChatInterface({ socket, embeddingKey, email }) {
               timestamp: new Date().toISOString(),
             });
             addMessage(newMessage);
+            
+            // Focus the input field after receiving a message
+            setTimeout(() => {
+              if (inputRef.current) {
+                inputRef.current.focus();
+              }
+            }, 100);
           }
         } else if (parsedData.type === 'error') {
           setIsTyping(false);
@@ -336,43 +368,55 @@ function ChatInterface({ socket, embeddingKey, email }) {
     isProcessingRef.current = true
     lastStreamEndRef.current = null
 
-    const messageData = {
-      question: messageText,
-      embeddingKey,
-      email
-    }
-
-    socket.send(JSON.stringify(messageData))
+    setTimeout(() => {
+      const messageData = {
+        question: messageText,
+        embeddingKey,
+        email
+      }
+  
+      socket.send(JSON.stringify(messageData))
+    }, 100)
   }
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-lg">
+    <div className="h-full flex flex-col">
+      {/* Header with restart button */}
+      <div className="bg-white border-b border-gray-200 py-3 px-4 flex justify-between items-center">
+        <h2 className="text-lg font-medium text-gray-800">Chat with CV Assistant</h2>
+        <button 
+          onClick={onRestartChat}
+          className="text-sm text-blue-600 hover:text-blue-800 flex items-center transition-colors"
+        >
+          <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Upload New CV
+        </button>
+      </div>
+
+      {/* Chat messages */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto scroll-smooth"
-        style={{
-          height: 'calc(100vh - 280px)',
-          minHeight: '400px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: '#CBD5E0 #F1F5F9',
-          WebkitOverflowScrolling: 'touch' // For smooth scrolling on iOS
-        }}
+        className="flex-1 overflow-y-auto bg-gray-50/60 p-4 space-y-4"
       >
-        <div className="flex flex-col p-6 space-y-4">
-          <MessageList 
-            messages={messages} 
-            currentStreamingMessage={currentStreamingMessage}
-            isTyping={isTyping}
-          />
-          <div ref={messagesEndRef} className="h-4" />
-        </div>
+        <MessageList 
+          messages={messages} 
+          streamingMessage={isStreaming ? currentStreamingMessage : ''} 
+          isTyping={isTyping}
+          messagesEndRef={messagesEndRef}
+        />
       </div>
-      <div className="border-t border-gray-200 bg-white p-4 sticky bottom-0">
-        <ChatInput
+
+      {/* Input area */}
+      <div className="bg-white border-t border-gray-200 p-4">
+        <ChatInput 
           value={inputMessage}
-          onChange={setInputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
           onSubmit={handleSubmit}
-          disabled={isTyping || isStreaming}
+          disabled={!isConnected || isStreaming}
+          placeholder={isConnected ? "Type your message..." : "Connecting..."}
+          ref={inputRef}
         />
       </div>
     </div>
