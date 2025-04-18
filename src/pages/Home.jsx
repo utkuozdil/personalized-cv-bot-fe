@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import PDFUpload from '../components/PDFUpload'
 import ChatInterface from '../components/ChatInterface'
 import PreviousCVDialog from '../components/PreviousCVDialog'
+import RestartChatDialog from '../components/RestartChatDialog'
 import ErrorMessage from '../components/ErrorMessage'
 import { validateEmail, checkPreviousCV, uploadCV, pollStatus } from '../utils/cv'
 import { getStatusMessage, calculateProgress } from '../utils/status'
@@ -27,6 +28,7 @@ export default function Home() {
   const [highestProgress, setHighestProgress] = useState(0)
   const [previousCV, setPreviousCV] = useState(null)
   const [showPreviousDialog, setShowPreviousDialog] = useState(false)
+  const [showRestartDialog, setShowRestartDialog] = useState(false)
 
   // Initialize session from localStorage
   useEffect(() => {
@@ -265,7 +267,7 @@ export default function Home() {
     localStorage.removeItem('embeddingKey')
     localStorage.removeItem('conversation')
     localStorage.removeItem('currentEmbeddingKey')
-    setEmail('')
+
     setUuid(null)
     setEmbeddingKey(null)
     setSocket(null)
@@ -275,10 +277,18 @@ export default function Home() {
     setErrorMessageText('')
   }
 
-  const handleStartNew = () => {
+  const handleStartForExistingEmail = () => {
     setShowPreviousDialog(false)
+    setShowRestartDialog(false)
     setPreviousCV(null)
-    clearState() // Use full clearState to reset everything
+    clearState()
+  }
+
+  const handleStartFromScratch = () => {
+    setShowPreviousDialog(false)
+    setShowRestartDialog(false)
+    setPreviousCV(null)
+    clearState()
   }
 
   const handleResumePrevious = async () => {
@@ -317,6 +327,14 @@ export default function Home() {
       setStatus('error')
       clearProcessingState()
     }
+  }
+
+  const handleRestartChat = () => {
+    setShowRestartDialog(true)
+  }
+
+  const handleCancelRestart = () => {
+    setShowRestartDialog(false)
   }
 
   return (
@@ -360,6 +378,7 @@ export default function Home() {
                       socket={socket}
                       embeddingKey={embeddingKey}
                       email={email}
+                      onRestartChat={handleRestartChat}
                     />
                   </div>
                 </div>
@@ -370,7 +389,7 @@ export default function Home() {
                 <ErrorMessage
                   data-testid="error-message-component"
                   message={errorMessageText || "An error occurred. Please try again."}
-                  onTryAgain={handleStartNew}
+                  onTryAgain={handleStartForExistingEmail}
                 />
               )}
             </div>
@@ -383,8 +402,16 @@ export default function Home() {
         open={showPreviousDialog}
         onClose={() => setShowPreviousDialog(false)}
         previousCV={previousCV}
-        onStartNew={handleStartNew}
+        onStartNew={handleStartForExistingEmail}
         onResumePrevious={handleResumePrevious}
+      />
+
+      {/* Restart Chat Dialog */}
+      <RestartChatDialog
+        open={showRestartDialog}
+        onClose={() => setShowRestartDialog(false)}
+        onCancel={handleCancelRestart}
+        onRestart={handleStartFromScratch}
       />
     </div>
   )

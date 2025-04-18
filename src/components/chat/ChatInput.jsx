@@ -1,15 +1,16 @@
-import React from 'react'
+import React, { forwardRef } from 'react'
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
 
-function ChatInput({ value, onChange, onSubmit, disabled }) {
+const ChatInput = forwardRef(function ChatInput({ value, onChange, onSubmit, disabled, placeholder = "Type your message..." }, ref) {
   return (
     <form onSubmit={onSubmit} className="w-full">
       <div className="flex items-center space-x-2">
         <input
+          ref={ref}
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Type your message..."
+          onChange={onChange}
+          placeholder={placeholder}
           className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
           disabled={disabled}
         />
@@ -23,6 +24,6 @@ function ChatInput({ value, onChange, onSubmit, disabled }) {
       </div>
     </form>
   )
-}
+})
 
 export default ChatInput 
